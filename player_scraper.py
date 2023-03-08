@@ -16,6 +16,30 @@ def clean_number(raw_text):
 
     return result
 
+
+
+
+
+class HockeyPlayer:
+    player_name = ""
+    birth_date = None
+
+    def __init__(self, player_name, birth_date):
+        self.player_name = player_name
+        self.birth_date = birth_date
+
+    
+
+class Skater(HockeyPlayer):
+    def __init__(self, player_name, birth_date):
+        super().__init__(player_name, birth_date)
+        
+
+
+class Goalie(HockeyPlayer):
+    def __init__(self, player_name, birth_date):
+        super().__init__(player_name, birth_date)
+
     
 
 
