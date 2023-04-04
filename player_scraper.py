@@ -55,16 +55,16 @@ page = requests.get(url)
 if page.status_code == 200:
     soup = BeautifulSoup(page.text, 'lxml')
 
-    span = soup.find('span', id = 'Career_statistics')
-    table = span.find_next('table')
-    rows = table.findAll('tr')
+    career_statistic_span = soup.find('span', id = 'Career_statistics')
+    career_statistic_table = career_statistic_span.find_next('table')
+    career_statistic_rows = career_statistic_table.findAll('tr')
 
-    season_stats = []
+    career_statistics = []
 
-    for row in rows:
-        columns = row.findAll('td')
+    for career_statistic_row in career_statistic_rows:
+        columns = career_statistic_row.findAll('td')
         if len(columns) > 0:
-            stat = {
+            career_statistic = {
                 "season": columns[0].text.strip(),
                 "team": columns[1].text.strip(),
                 "league": columns[2].text.strip(),
@@ -79,7 +79,26 @@ if page.status_code == 200:
                 "playoff_season_point_count": clean_number(columns[11].text),
                 "playoff_season_penalty_minute_count": clean_number(columns[12].text)
             }
-            season_stats.append(stat)
+            career_statistics.append(career_statistic)
+
+
+
+    player = {}
+    infobox_table = soup.find('table', {"class": "infobox vcard"})
+    infobox_rows = infobox_table.findAll('tr')
+    for infobox_row in infobox_rows:
+        attribute_name_column = infobox_row.findAll('th')
+        attribute_name = None
+        if len(attribute_name_column) > 0:
+            attribute_name = attribute_name_column[0].text            
+
+        attribute_value = None
+        attribute_value_column = infobox_row.findAll('td')
+        if len(attribute_value_column) > 0:
+            attribute_value = attribute_value_column[0].text
+
+        if attribute_name is not None:
+            player[attribute_name] = attribute_value
 
     print('this')
 
