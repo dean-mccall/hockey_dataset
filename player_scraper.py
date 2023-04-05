@@ -221,7 +221,7 @@ def scrape_player(player):
                         "playoff_season_penalty_minute_count": clean_career_statistic_number(columns[12].text)
                     }
                     career_statistics.append(career_statistic)
-                except (IndexError):
+                except (IndexError, ValueError):
                     logging.error('failed parsing player stats')
 
 
