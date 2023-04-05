@@ -21,9 +21,9 @@ def clean_career_statistic_number(raw_text):
     if raw_text is None:
         result = None
     else:
-        result = raw_text.strip().replace('—', '')
+        result = raw_text.strip().replace('—', '').replace(',', '')
         if len(result) > 0:
-            result = int(result)
+            result = pd.to_numeric(result)
         else:
             result = None
 
@@ -106,18 +106,54 @@ def scrape_league(league_wikipedia_url):
 #
 #  
 #
-def scrape_roster(team_wikipedia_url):
-    print('test')
+def scrape_roster(team):
+    logging.debug(team['team_url'])
+
+    team_page = requests.get(team['team_url'])
+    if team_page.status_code == 200:
+        logging.debug('finding roster')
+        soup = BeautifulSoup(team_page.text, 'lxml')
+
+        #  find span with teams id
+        players_and_personnel_span = soup.find('span', id = 'Players_and_personnel')
+        roster_span = soup.find('span', id = 'Current_roster')
+        roster_table = roster_span.findNext('table')
+
+        players = []
+        player_rows = roster_table.findChildren('tr')
+        player_row_count = 0
+        for player_row in player_rows:
+            player_row_count = player_row_count + 1
+
+            if player_row_count > 1:
+                player_cells = player_row.findChildren('th')
+
+                # jersey_number = player_cells[0].text
+                player_anchor = player_cells[0].findChildren('a')
+                # player_url = player_cells[0].findChildren('a').get('href')
+                # player_name = player_cells[0].findChildren('a').text
+
+                player = {
+                    # "jersey_number": jersey_number,
+                    "player_url": urljoin(WIKIPEDIA_BASE_URL, player_anchor[0].get('href')),
+                    "player_name": player_anchor[0].text
+                }
+                players.append(player)
+
+
+        return players
+    else:
+        logging.error("failed getting roster")
 
 
 
 #
 #  retrieve data from player data from wikipedia page
 #
-def scrape_player(player_wikipedia_url):
+def scrape_player(player):
 
     # page contents
-    page = requests.get(player_wikipedia_url)
+    page = requests.get(player['player_url'])
 
     # parse the contents if the page was retrieved
     if page.status_code == 200:
@@ -165,22 +201,26 @@ def scrape_player(player_wikipedia_url):
         for career_statistic_row in career_statistic_rows:
             columns = career_statistic_row.findAll('td')
             if len(columns) > 0:
-                career_statistic = {
-                    "season": columns[0].text.strip(),
-                    "team": columns[1].text.strip(),
-                    "league": columns[2].text.strip(),
-                    "regular_season_games_played_count": clean_career_statistic_number(columns[3].text),
-                    "regular_season_goal_count": clean_career_statistic_number(columns[4].text),
-                    "regular_season_assist_count": clean_career_statistic_number(columns[5].text),
-                    "regular_season_point_count": clean_career_statistic_number(columns[6].text),
-                    "regular_season_penalty_minute_count": clean_career_statistic_number(columns[7].text),
-                    "playoff_season_games_played_count": clean_career_statistic_number(columns[8].text),
-                    "playoff_season_goal_count": clean_career_statistic_number(columns[9].text),
-                    "playoff_season_assist_count": clean_career_statistic_number(columns[10].text),
-                    "playoff_season_point_count": clean_career_statistic_number(columns[11].text),
-                    "playoff_season_penalty_minute_count": clean_career_statistic_number(columns[12].text)
-                }
-                career_statistics.append(career_statistic)
+                try:
+                    career_statistic = {
+                        "season": columns[0].text.strip(),
+                        "team": columns[1].text.strip(),
+                        "league": columns[2].text.strip(),
+                        "regular_season_games_played_count": clean_career_statistic_number(columns[3].text),
+                        "regular_season_goal_count": clean_career_statistic_number(columns[4].text),
+                        "regular_season_assist_count": clean_career_statistic_number(columns[5].text),
+                        "regular_season_point_count": clean_career_statistic_number(columns[6].text),
+                        "regular_season_penalty_minute_count": clean_career_statistic_number(columns[7].text),
+                        "playoff_season_games_played_count": clean_career_statistic_number(columns[8].text),
+                        "playoff_season_goal_count": clean_career_statistic_number(columns[9].text),
+                        "playoff_season_assist_count": clean_career_statistic_number(columns[10].text),
+                        "playoff_season_point_count": clean_career_statistic_number(columns[11].text),
+                        "playoff_season_penalty_minute_count": clean_career_statistic_number(columns[12].text)
+                    }
+                    career_statistics.append(career_statistic)
+                except (IndexError):
+                    logging.error('failed parsing player stats')
+
 
             player['career_statistics'] = career_statistics
 
@@ -199,7 +239,16 @@ def main():
     # url = "https://en.wikipedia.org/wiki/Wayne_Gretzky"
 
     # player_data = scrape_player(url)
-    scrape_league(NHL_LEAGUE_URL)
+    teams = scrape_league(NHL_LEAGUE_URL)
+    logging.info('scraping %s teams', len(teams))
+    for team in teams:
+        players = scrape_roster(team)
+        logging.info('scraping %s players on team %s', len(players), team['team'])
+        for player in players:
+            logging.debug('scraping %s', player['player_url'])
+            player_info = scrape_player(player)
+
+        logging.debug(len(players))
 
 
 
