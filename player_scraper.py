@@ -5,6 +5,9 @@ import re
 from datetime import datetime
 import logging
 from requests.compat import urljoin
+import os
+import json
+from numpyencoder import NumpyEncoder
 
 
 #  configure logging
@@ -234,11 +237,12 @@ def scrape_player(player):
 def main():
     logging.info('starting')
 
-    # page to scrape
-    # url = "https://en.wikipedia.org/wiki/Nathan_MacKinnon"
-    # url = "https://en.wikipedia.org/wiki/Wayne_Gretzky"
 
-    # player_data = scrape_player(url)
+    if not os.path.exists('data'):
+        os.mkdir('data')
+
+
+
     teams = scrape_league(NHL_LEAGUE_URL)
     logging.info('scraping %s teams', len(teams))
     for team in teams:
@@ -247,6 +251,11 @@ def main():
         for player in players:
             logging.debug('scraping %s', player['player_url'])
             player_info = scrape_player(player)
+
+            player_file_name = player['player_url'].rsplit('/', 1)[-1]
+            with open('data/' + player_file_name + '.json', 'w') as player_file:
+                player_file.write(json.dumps(player_info, indent = 4, cls = NumpyEncoder, default=str))
+
 
         logging.debug(len(players))
 
