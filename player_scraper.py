@@ -269,7 +269,7 @@ def archive_folder(source_folder_name):
     logging.debug('archiving %s', source_folder_name)
 
     base_name = os.path.basename(os.path.normpath(source_folder_name))
-    time_stamp = time.strftime('%Y%m%d-%H%M%S')
+    time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S')
     target_folder_name = 'data/archive/' + time_stamp + '_' + base_name
 
     shutil.move(source_folder_name, target_folder_name)
@@ -290,9 +290,12 @@ def save_json(player_details):
     player_count = 0
     for player_detail in player_details:
         player_count = player_count + 1
-        player_file_name = player_detail['player_url'].rsplit('/', 1)[-1]
-        with open('data/json/' + player_file_name + '.json', 'w') as player_file:
-            player_file.write(json.dumps(player_detail, indent = 4, cls = NumpyEncoder, default=str))    
+        if player_detail is not None:
+            player_file_name = player_detail['player_url'].rsplit('/', 1)[-1]
+            with open('data/json/' + player_file_name + '.json', 'w') as player_file:
+                player_file.write(json.dumps(player_detail, indent = 4, cls = NumpyEncoder, default=str))    
+        else:
+            logging.error('blank player')
 
     logging.info('wrote %s players to data/json', player_count)
 
@@ -309,7 +312,10 @@ def main():
     #  scrape an array of teams pages
     teams = scrape_league(NHL_LEAGUE_URL)
     logging.info('scraped %s teams', len(teams))
+
+    team_count = 0
     for team in teams:
+        team_count = team_count + 1
 
         #  scrape a list of players from the team page
         players = scrape_roster(team)
