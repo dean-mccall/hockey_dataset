@@ -52,6 +52,9 @@ def clean_attribute_name(raw_text):
     return result
 
 
+#
+#  clean unicode values from scraped text
+#
 def clean_attribute_value(raw_text):
     return raw_text.replace(u'\n', '').replace(u'\u2013', '-')
 
@@ -170,6 +173,7 @@ def scrape_roster(team):
 #  retrieve data from player data from wikipedia page
 #
 def scrape_player(player):
+    logging.debug('scraping data from %s', player['player_url'])
 
     # page contents
     player_page = requests.get(player['player_url'])
@@ -244,15 +248,17 @@ def scrape_player(player):
                             "playoff_season_penalty_minute_count": clean_career_statistic_number(columns[12].text)
                         }
                         career_statistics.append(career_statistic)
-                    except (IndexError, ValueError):
+                    except Exception as e:
                         #  the player pages are not uniform
                         logging.error('failed parsing player stats from %s', player['player_url'])
+                        logging.error(str(e))
                         #  swallow the error and continue looking
 
                 #  add the career stats to the player dictionary
                 player['career_statistics'] = career_statistics
-        except:
+        except Exception as e:
             logging.error('structure of career statistics is unexpected for %s', player['player_url'])
+            logging.error(str(e))
 
 
         return player
@@ -311,21 +317,13 @@ def main():
 
     #  scrape an array of teams pages
     teams = scrape_league(NHL_LEAGUE_URL)
-    logging.info('scraped %s teams', len(teams))
-
     team_count = 0
     for team in teams:
         team_count = team_count + 1
 
         #  scrape a list of players from the team page
         players = scrape_roster(team)
-        logging.info('scraped %s players on team %s', len(players), team['team'])
         for player in players:
-
-            # get career statisttics for each player
-            logging.debug('scraping %s', player['player_url'])
-
-            #  append to list of player details
             player_details.append(scrape_player(player))
 
 
