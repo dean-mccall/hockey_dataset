@@ -106,7 +106,7 @@ def scrape_league(league_wikipedia_url):
                     team = {
                         "league_conference": league_conference,
                         "conference_division": conference_division,
-                        "team": team_name,
+                        "team_name": team_name,
                         "team_url": urljoin(WIKIPEDIA_BASE_URL, team_url)
                     }
                     teams.append(team)
@@ -292,13 +292,37 @@ def save_player_json(player_details):
     for player_detail in player_details:
         player_count = player_count + 1
         if player_detail is not None:
-            player_file_name = player_detail['player_url'].rsplit('/', 1)[-1]
-            with open(player_path.joinpath(player_file_name + '.json'), 'w') as player_file:
+            player_file_name = (player_detail['player_url'].rsplit('/', 1)[-1]).lower()
+            with open(player_path.joinpath(player_file_name + '.json'), 'w', encoding = "utf8") as player_file:
                 player_file.write(json.dumps(player_detail, indent = 4, cls = NumpyEncoder, default=str))
         else:
             logging.error('blank player')
 
     logging.info('wrote %s players', player_count)
+
+
+def save_team_json(teams):
+    """write team data in JSON format"""
+    team_path = JSON_PATH.joinpath('team')
+
+    if os.path.exists(team_path):
+        archive_folder(team_path)
+
+    os.mkdir(team_path)
+
+
+    team_count = 0
+    for team in teams:
+        team_count = team_count + 1
+        if team is not None:
+            team_file_name = team['team_name'].lower().replace(' ', '_')
+            with open(team_path.joinpath(team_file_name + '.json'), 'w', encoding = "utf8") as team_file:
+                team_file.write(json.dumps(team, indent = 4, cls = NumpyEncoder, default=str))
+        else:
+            logging.error('blank team')
+
+    logging.info('write %s teams', team_count)
+
 
 
 def main():
@@ -343,6 +367,7 @@ def main():
         os.mkdir(JSON_PATH)
 
     save_player_json(player_details)
+    save_team_json(teams)
 
 
     logging.info('ending')
