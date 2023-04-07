@@ -1,3 +1,4 @@
+"""extract player statistics from wikipedia"""
 from datetime import datetime
 import logging
 import shutil
