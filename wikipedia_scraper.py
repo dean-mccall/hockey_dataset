@@ -1,75 +1,71 @@
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-import re
+"""extract player statistics from wikipedia"""
 from datetime import datetime
 import logging
-from requests.compat import urljoin
-import os
-import json
-from numpyencoder import NumpyEncoder
 import shutil
 import time
+import os
+import json
+from pathlib import Path
+from bs4 import BeautifulSoup
+import pandas as pd
+from numpyencoder import NumpyEncoder
+import requests
+from requests.compat import urljoin
+
 
 
 #  configure logging
-logging.basicConfig(level = logging.INFO, format = '%(asctime)s | %(name)s | %(levelname)s | %(message)s')
+logging.basicConfig(
+    level = logging.INFO,
+    format = '%(asctime)s | %(name)s | %(levelname)s | %(message)s')
 
+
+#  constants
 WIKIPEDIA_BASE_URL = 'https://en.wikipedia.org/'
 NHL_LEAGUE_URL = urljoin(WIKIPEDIA_BASE_URL, '/wiki/National_Hockey_League')
+DATA_PATH = Path('data')
+JSON_PATH = DATA_PATH.joinpath('json')
+ARCHIVE_PATH = DATA_PATH.joinpath('archive')
 
 
-#
-#  remove non-numeric characters from number in career statistics
-#
+
 def clean_career_statistic_number(raw_text):
+    """remove non-numeric characters from number in career statistics"""
     if raw_text is None:
         result = None
     else:
         result = raw_text.strip().replace('—', '').replace(',', '')
         if len(result) > 0:
-            result = pd.to_numeric(result)
+            if result.isnumeric():
+                result = pd.to_numeric(result)
+            else:
+                result = None
         else:
             result = None
 
     return result
 
 
-#
-#  translate infobox label to snake case attribute name
-#
 def clean_attribute_name(raw_text):
-    result = None
-    
-    # lower case
-    result = raw_text.lower()
-
-    # snake case
-    result = result.replace(' ', '_')
-
-    # special characters
-
-    return result
+    """translate infobox label to snake case attribute name"""
+    return raw_text.lower().replace(' ', '_')
 
 
-#
-#  clean unicode values from scraped text
-#
+
 def clean_attribute_value(raw_text):
-    return raw_text.replace(u'\n', '').replace(u'\u2013', '-')
+    """clean unicode values from scraped text"""
+    return raw_text.replace('\n', '').replace('\u2013', '-')
 
 
-#
-#  NHL
-#
 def scrape_league(league_wikipedia_url):
+    """use the league page to find teams"""
     logging.debug('starting league scrape.  league_wikipedia_url = %s', league_wikipedia_url)
 
     # result array
     teams = []
 
     # read the page
-    league_page = requests.get(league_wikipedia_url)
+    league_page = requests.get(league_wikipedia_url, timeout = 5)
     if league_page.status_code == 200:
         logging.debug('finding teams')
 
@@ -81,15 +77,15 @@ def scrape_league(league_wikipedia_url):
 
         #  find the table of teams
         teams_table = teams_span.find_next('table')
-        team_rows = teams_table.find_all('tr')
+        team_rows = teams_table.findChildren('tr')
         row_count = 0
         for team_row in team_rows:
             row_count = row_count + 1
 
             #  skip the header row
             if row_count > 1:
-                team_header_cells = team_row.select('th')
-                team_cells = team_row.select('td')
+                team_header_cells = team_row.findChildren('th')
+                team_cells = team_row.findChildren('td')
                 if len(team_header_cells) > 0:
                     #  handle conference identification that spans all columns
                     if team_header_cells[0].get('colspan') == '10':
@@ -103,7 +99,7 @@ def scrape_league(league_wikipedia_url):
 
                 #  information about the teams
                 if len(team_cells) > 0:
-                    team_anchor = team_cells[0].select('a')
+                    team_anchor = team_cells[0].findChildren('a')
                     team_url = team_anchor[0].get('href')
                     team_name = team_anchor[0].text
 
@@ -122,25 +118,23 @@ def scrape_league(league_wikipedia_url):
         logging.error(message)
         raise Exception(message)
 
-    
 
 
 
 
-#
-#  find the players on a team
-#
+
+
 def scrape_roster(team):
+    """find the players on a team"""
     logging.debug('collecting roster for %s', team['team_url'])
 
     #  read the page
-    team_page = requests.get(team['team_url'])
+    team_page = requests.get(team['team_url'], timeout = 5)
     if team_page.status_code == 200:
         logging.debug('finding roster')
         soup = BeautifulSoup(team_page.text, 'lxml')
 
         #  find span with teams id
-        players_and_personnel_span = soup.find('span', id = 'Players_and_personnel')
         roster_span = soup.find('span', id = 'Current_roster')
         roster_table = roster_span.findNext('table')
 
@@ -169,14 +163,12 @@ def scrape_roster(team):
 
 
 
-#
-#  retrieve data from player data from wikipedia page
-#
 def scrape_player(player):
+    """retrieve data from player data from wikipedia page"""
     logging.debug('scraping data from %s', player['player_url'])
 
     # page contents
-    player_page = requests.get(player['player_url'])
+    player_page = requests.get(player['player_url'], timeout = 5)
 
     # parse the contents if the page was retrieved
     if player_page.status_code == 200:
@@ -190,15 +182,15 @@ def scrape_player(player):
 
         #  player tombstone information is in an infobox
         infobox_table = soup.find('table', {"class": "infobox vcard"})
-        infobox_rows = infobox_table.findAll('tr')
+        infobox_rows = infobox_table.findChildren('tr')
         for infobox_row in infobox_rows:
-            attribute_name_column = infobox_row.findAll('th')
+            attribute_name_column = infobox_row.findChildren('th')
             attribute_name = None
             if len(attribute_name_column) > 0:
                 attribute_name = clean_attribute_name(attribute_name_column[0].text)
 
             attribute_value = None
-            attribute_value_column = infobox_row.findAll('td')
+            attribute_value_column = infobox_row.findChildren('td')
             if len(attribute_value_column) > 0:
                 #  handle some of the infobox attributes more carefully
                 match attribute_name:
@@ -214,7 +206,7 @@ def scrape_player(player):
                         attribute_value = clean_attribute_value(attribute_value_column[0].text)
                     case _:
                         attribute_value = clean_attribute_value(attribute_value_column[0].text)
-                
+
             #  only add the attribute if there is a value
             if attribute_name is not None:
                 player[attribute_name] = attribute_value
@@ -224,12 +216,12 @@ def scrape_player(player):
         try:
             career_statistic_span = soup.find('span', id = 'Career_statistics')
             career_statistic_table = career_statistic_span.find_next('table')
-            career_statistic_rows = career_statistic_table.findAll('tr')
+            career_statistic_rows = career_statistic_table.findChildren('tr')
 
             #  array of career statistics
             career_statistics = []
             for career_statistic_row in career_statistic_rows:
-                columns = career_statistic_row.findAll('td')
+                columns = career_statistic_row.findChildren('td')
                 if len(columns) > 0:
                     try:
                         career_statistic = {
@@ -259,19 +251,20 @@ def scrape_player(player):
         except Exception as e:
             logging.error('structure of career statistics is unexpected for %s', player['player_url'])
             logging.error(str(e))
+            #  swallow the error and continue to next player
 
 
         return player
     else:
         message = 'http request for player ' + player['player_url']
         logging.error(message)
-        # raise Exception(message)
-    
+        #  swallow the error and process the next player
 
-#
-#  archive a folder
-#
+
+
+
 def archive_folder(source_folder_name):
+    """archive a folder"""
     logging.debug('archiving %s', source_folder_name)
 
     base_name = os.path.basename(os.path.normpath(source_folder_name))
@@ -282,31 +275,34 @@ def archive_folder(source_folder_name):
     logging.debug('moved %s to %s', source_folder_name, target_folder_name)
 
 
-#
-#  serialize the player details to JSON files
-#
-def save_json(player_details):
-    #  serialize JSON
-    if os.path.exists('data/json'):
-        #  archive the existing folder and create a new one
-        archive_folder('data/json')
 
-    os.mkdir('data/json')
+def save_player_json(player_details):
+    """serialize the player details to JSON files"""
+    player_path = JSON_PATH.joinpath('player')
+
+    if os.path.exists(player_path):
+        #  archive the existing folder and create a new one
+        archive_folder(player_path)
+
+
+    os.mkdir(player_path)
+
 
     player_count = 0
     for player_detail in player_details:
         player_count = player_count + 1
         if player_detail is not None:
             player_file_name = player_detail['player_url'].rsplit('/', 1)[-1]
-            with open('data/json/' + player_file_name + '.json', 'w') as player_file:
-                player_file.write(json.dumps(player_detail, indent = 4, cls = NumpyEncoder, default=str))    
+            with open(player_path.joinpath(player_file_name + '.json'), 'w') as player_file:
+                player_file.write(json.dumps(player_detail, indent = 4, cls = NumpyEncoder, default=str))
         else:
             logging.error('blank player')
 
-    logging.info('wrote %s players to data/json', player_count)
+    logging.info('wrote %s players', player_count)
 
 
 def main():
+    """main"""
     logging.info('starting')
 
 
@@ -333,16 +329,20 @@ def main():
 
 
     #  make target data directory
-    if not os.path.exists('data'):
-        os.mkdir('data')
+    if not os.path.exists(DATA_PATH):
+        os.mkdir(DATA_PATH)
 
     #  make archive directory
-    if not os.path.exists('data/archive'):
-        os.mkdir('data/archive')
+    if not os.path.exists(ARCHIVE_PATH):
+        os.mkdir(ARCHIVE_PATH)
 
 
     #  serialize J
-    save_json(player_details)
+    #  make json data dictory
+    if not os.path.exists(JSON_PATH):
+        os.mkdir(JSON_PATH)
+
+    save_player_json(player_details)
 
 
     logging.info('ending')
