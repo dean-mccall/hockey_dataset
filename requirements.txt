@@ -5,3 +5,4 @@ lxml
 ipykernel
 numpyencoder
 sqlalchemy
+pylint
