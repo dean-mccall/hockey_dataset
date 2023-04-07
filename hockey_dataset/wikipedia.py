@@ -22,11 +22,12 @@ logging.basicConfig(
 
 #  constants
 JSON_FORMAT = 0
-
-
-
 WIKIPEDIA_BASE_URL = 'https://en.wikipedia.org/'
 NHL_LEAGUE_URL = urljoin(WIKIPEDIA_BASE_URL, '/wiki/National_Hockey_League')
+JSON_PATH_NAME = 'json'
+PLAYER_PATH_NAME = 'player'
+TEAM_PATH_NAME = 'team'
+REQUEST_READ_TIMEOUT = 10
 
 
 
@@ -66,7 +67,7 @@ def extract_teams():
     teams = []
 
     # read the page
-    league_page = requests.get(NHL_LEAGUE_URL, timeout = 5)
+    league_page = requests.get(NHL_LEAGUE_URL, timeout = REQUEST_READ_TIMEOUT)
     if league_page.status_code == 200:
         logging.debug('finding teams')
 
@@ -126,7 +127,7 @@ def extract_roster(team):
     logging.debug('collecting roster for %s', team['team_url'])
 
     #  read the page
-    team_page = requests.get(team['team_url'], timeout = 5)
+    team_page = requests.get(team['team_url'], timeout = REQUEST_READ_TIMEOUT)
     if team_page.status_code == 200:
         logging.debug('finding roster')
         soup = BeautifulSoup(team_page.text, 'lxml')
@@ -165,7 +166,7 @@ def extract_player(player):
     logging.debug('scraping data from %s', player['player_url'])
 
     # page contents
-    player_page = requests.get(player['player_url'], timeout = 5)
+    player_page = requests.get(player['player_url'], timeout = REQUEST_READ_TIMEOUT)
 
     # parse the contents if the page was retrieved
     if player_page.status_code == 200:
@@ -306,15 +307,17 @@ def extract_players():
 
 
 
-def save_team_json(output_path):
+def save_team_json(output_folder_name:str):
     """write team data in JSON format"""
+
+    output_path = Path(output_folder_name)
 
     team_count = 0
     for team in extract_teams():
         team_count = team_count + 1
         if team is not None:
             team_file_name = team['team_name'].lower().replace(' ', '_')
-            with open(output_path.joinpath(team_file_name + '.json'), 'w', encoding = "utf8") as team_file:
+            with open(output_path.joinpath(team_file_name + '.json') , 'w', encoding = 'utf8') as team_file:
                 team_file.write(json.dumps(team, indent = 4, cls = NumpyEncoder, default=str))
         else:
             logging.error('blank team')
@@ -322,21 +325,17 @@ def save_team_json(output_path):
     logging.info('write %s teams', team_count)
 
 
-def save_to_folder(output_folder_name, format):
+def save_to_folder(output_folder_name: str, format: int):
     """save extract to a format"""
 
     output_path = Path(output_folder_name)
-    player_path = output_path.joinpath('player')
-    team_path = output_path.joinpath('team')
+    json_path = output_path.joinpath(JSON_PATH_NAME)
+    player_path = json_path.joinpath(PLAYER_PATH_NAME)
+    team_path = json_path.joinpath(TEAM_PATH_NAME)
 
-    if not os.exists(output_path):
-        os.mkdir(output_path)
-
-    if not os.exists(player_path):
-        os.mkdir(player_path)
-
-    if not os.exists(team_path):
-        os.mkdir(team_path)
+    json_path.mkdir(exist_ok = True)
+    player_path.mkdir(exist_ok = True)
+    team_path.mkdir(exist_ok = True)
 
     match format:
         case 0:
@@ -346,55 +345,3 @@ def save_to_folder(output_folder_name, format):
             raise Exception('unknown file format')
 
 
-
-# def main():
-#     """main"""
-#     logging.info('starting')
-
-
-
-
-#     #  extract the data from wikipedia
-#     player_details = []
-
-#     #  scrape an array of teams pages
-#     teams = scrape_league(NHL_LEAGUE_URL)
-#     team_count = 0
-#     for team in teams:
-#         team_count = team_count + 1
-
-#         #  scrape a list of players from the team page
-#         players = scrape_roster(team)
-#         for player in players:
-#             player_details.append(scrape_player(player))
-
-
-#     #  save the data
-#     logging.info('saving the data')
-
-
-
-#     #  make target data directory
-#     if not os.path.exists(DATA_PATH):
-#         os.mkdir(DATA_PATH)
-
-#     #  make archive directory
-#     if not os.path.exists(ARCHIVE_PATH):
-#         os.mkdir(ARCHIVE_PATH)
-
-
-#     #  serialize J
-#     #  make json data dictory
-#     if not os.path.exists(JSON_PATH):
-#         os.mkdir(JSON_PATH)
-
-#     save_player_json(player_details)
-#     save_team_json(teams)
-
-
-#     logging.info('ending')
-
-
-
-# if __name__ == '__main__':
-#     main()
