@@ -21,11 +21,13 @@ logging.basicConfig(
 
 
 #  constants
+JSON_FORMAT = 0
 WIKIPEDIA_BASE_URL = 'https://en.wikipedia.org/'
 NHL_LEAGUE_URL = urljoin(WIKIPEDIA_BASE_URL, '/wiki/National_Hockey_League')
-DATA_PATH = Path('data')
-JSON_PATH = DATA_PATH.joinpath('json')
-ARCHIVE_PATH = DATA_PATH.joinpath('archive')
+JSON_PATH_NAME = 'json'
+PLAYER_PATH_NAME = 'player'
+TEAM_PATH_NAME = 'team'
+REQUEST_READ_TIMEOUT = 10
 
 
 
@@ -57,15 +59,15 @@ def clean_attribute_value(raw_text):
     return raw_text.replace('\n', '').replace('\u2013', '-')
 
 
-def scrape_league(league_wikipedia_url):
+def extract_teams():
     """use the league page to find teams"""
-    logging.debug('starting league scrape.  league_wikipedia_url = %s', league_wikipedia_url)
+    logging.debug('starting league scrape')
 
     # result array
     teams = []
 
     # read the page
-    league_page = requests.get(league_wikipedia_url, timeout = 5)
+    league_page = requests.get(NHL_LEAGUE_URL, timeout = REQUEST_READ_TIMEOUT)
     if league_page.status_code == 200:
         logging.debug('finding teams')
 
@@ -120,16 +122,12 @@ def scrape_league(league_wikipedia_url):
 
 
 
-
-
-
-
-def scrape_roster(team):
+def extract_roster(team):
     """find the players on a team"""
     logging.debug('collecting roster for %s', team['team_url'])
 
     #  read the page
-    team_page = requests.get(team['team_url'], timeout = 5)
+    team_page = requests.get(team['team_url'], timeout = REQUEST_READ_TIMEOUT)
     if team_page.status_code == 200:
         logging.debug('finding roster')
         soup = BeautifulSoup(team_page.text, 'lxml')
@@ -138,7 +136,7 @@ def scrape_roster(team):
         roster_span = soup.find('span', id = 'Current_roster')
         roster_table = roster_span.findNext('table')
 
-        players = []
+        roster_players = []
         player_rows = roster_table.findChildren('tr')
         player_row_count = 0
         for player_row in player_rows:
@@ -148,14 +146,14 @@ def scrape_roster(team):
                 player_cells = player_row.findChildren('th')
                 player_anchor = player_cells[0].findChildren('a')
 
-                player = {
+                roster_player = {
                     "player_url": urljoin(WIKIPEDIA_BASE_URL, player_anchor[0].get('href')),
                     "player_name": player_anchor[0].text
                 }
-                players.append(player)
+                roster_players.append(roster_player)
 
-        logging.info('found %s players on %s', len(players), team['team_url'])
-        return players
+        logging.info('found %s players on %s', len(roster_players), team['team_url'])
+        return roster_players
     else:
         message = 'http request failed for league page'
         logging.error(message)
@@ -163,12 +161,12 @@ def scrape_roster(team):
 
 
 
-def scrape_player(player):
+def extract_player(player):
     """retrieve data from player data from wikipedia page"""
     logging.debug('scraping data from %s', player['player_url'])
 
     # page contents
-    player_page = requests.get(player['player_url'], timeout = 5)
+    player_page = requests.get(player['player_url'], timeout = REQUEST_READ_TIMEOUT)
 
     # parse the contents if the page was retrieved
     if player_page.status_code == 200:
@@ -208,7 +206,7 @@ def scrape_player(player):
                         attribute_value = clean_attribute_value(attribute_value_column[0].text)
 
             #  only add the attribute if there is a value
-            if attribute_name is not None:
+            if attribute_name is not None and attribute_value is not None:
                 player[attribute_name] = attribute_value
 
 
@@ -276,24 +274,14 @@ def archive_folder(source_folder_name):
 
 
 
-def save_player_json(player_details):
+def save_player_json(output_path):
     """serialize the player details to JSON files"""
-    player_path = JSON_PATH.joinpath('player')
-
-    if os.path.exists(player_path):
-        #  archive the existing folder and create a new one
-        archive_folder(player_path)
-
-
-    os.mkdir(player_path)
-
-
     player_count = 0
-    for player_detail in player_details:
+    for player_detail in extract_players():
         player_count = player_count + 1
         if player_detail is not None:
             player_file_name = (player_detail['player_url'].rsplit('/', 1)[-1]).lower()
-            with open(player_path.joinpath(player_file_name + '.json'), 'w', encoding = "utf8") as player_file:
+            with open(output_path.joinpath(player_file_name + '.json'), 'w', encoding = "utf8") as player_file:
                 player_file.write(json.dumps(player_detail, indent = 4, cls = NumpyEncoder, default=str))
         else:
             logging.error('blank player')
@@ -301,22 +289,35 @@ def save_player_json(player_details):
     logging.info('wrote %s players', player_count)
 
 
-def save_team_json(teams):
+def extract_players():
+    """return a dictionary object with all player data"""
+    #  extract the data from wikipedia
+    players = []
+
+    #  scrape an array of teams pages
+    teams = extract_teams()
+    for team in teams:
+        #  scrape a list of players from the team page
+        roster = extract_roster(team)
+        for rostered_player in roster:
+            players.append(extract_player(rostered_player))
+
+    logging.info('found %s players', len(players))
+    return players
+
+
+
+def save_team_json(output_folder_name:str):
     """write team data in JSON format"""
-    team_path = JSON_PATH.joinpath('team')
 
-    if os.path.exists(team_path):
-        archive_folder(team_path)
-
-    os.mkdir(team_path)
-
+    output_path = Path(output_folder_name)
 
     team_count = 0
-    for team in teams:
+    for team in extract_teams():
         team_count = team_count + 1
         if team is not None:
             team_file_name = team['team_name'].lower().replace(' ', '_')
-            with open(team_path.joinpath(team_file_name + '.json'), 'w', encoding = "utf8") as team_file:
+            with open(output_path.joinpath(team_file_name + '.json') , 'w', encoding = 'utf8') as team_file:
                 team_file.write(json.dumps(team, indent = 4, cls = NumpyEncoder, default=str))
         else:
             logging.error('blank team')
@@ -324,55 +325,23 @@ def save_team_json(teams):
     logging.info('write %s teams', team_count)
 
 
+def save_to_folder(output_folder_name: str, format: int):
+    """save extract to a format"""
 
-def main():
-    """main"""
-    logging.info('starting')
+    output_path = Path(output_folder_name)
+    json_path = output_path.joinpath(JSON_PATH_NAME)
+    player_path = json_path.joinpath(PLAYER_PATH_NAME)
+    team_path = json_path.joinpath(TEAM_PATH_NAME)
 
+    json_path.mkdir(exist_ok = True)
+    player_path.mkdir(exist_ok = True)
+    team_path.mkdir(exist_ok = True)
 
-
-
-    #  extract the data from wikipedia
-    player_details = []
-
-    #  scrape an array of teams pages
-    teams = scrape_league(NHL_LEAGUE_URL)
-    team_count = 0
-    for team in teams:
-        team_count = team_count + 1
-
-        #  scrape a list of players from the team page
-        players = scrape_roster(team)
-        for player in players:
-            player_details.append(scrape_player(player))
+    match format:
+        case 0:
+            save_team_json(team_path)
+            save_player_json(player_path)
+        case _:
+            raise Exception('unknown file format')
 
 
-    #  save the data
-    logging.info('saving the data')
-
-
-
-    #  make target data directory
-    if not os.path.exists(DATA_PATH):
-        os.mkdir(DATA_PATH)
-
-    #  make archive directory
-    if not os.path.exists(ARCHIVE_PATH):
-        os.mkdir(ARCHIVE_PATH)
-
-
-    #  serialize J
-    #  make json data dictory
-    if not os.path.exists(JSON_PATH):
-        os.mkdir(JSON_PATH)
-
-    save_player_json(player_details)
-    save_team_json(teams)
-
-
-    logging.info('ending')
-
-
-
-if __name__ == '__main__':
-    main()
