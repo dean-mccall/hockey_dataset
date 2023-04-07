@@ -22,7 +22,7 @@ dependencies = [
     'sqlalchemy >= 2.0.9, < 3',
     'pylint >= 2.17.2, < 3',
     'pytest >= 7.2.2, < 8',
-    'build >= 0.10.0, 1'
+    'build >= 0.10.0, < 1'
 ]
 
 [project.urls]
