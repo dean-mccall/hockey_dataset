@@ -260,20 +260,6 @@ def extract_player(player):
 
 
 
-
-def archive_folder(source_folder_name):
-    """archive a folder"""
-    logging.debug('archiving %s', source_folder_name)
-
-    base_name = os.path.basename(os.path.normpath(source_folder_name))
-    time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S')
-    target_folder_name = 'data/archive/' + time_stamp + '_' + base_name
-
-    shutil.move(source_folder_name, target_folder_name)
-    logging.debug('moved %s to %s', source_folder_name, target_folder_name)
-
-
-
 def save_player_json(output_path):
     """serialize the player details to JSON files"""
     player_count = 0
