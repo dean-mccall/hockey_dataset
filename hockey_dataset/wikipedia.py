@@ -194,8 +194,9 @@ def extract_player(player):
                 match attribute_name:
                     case 'born':
                         bday_span = soup.find('span', {"class": "bday"})
-                        if len(bday_span) > 0:
-                            attribute_value = datetime.strptime(bday_span.text, "%Y-%m-%d")
+                        if bday_span is not None:
+                            if len(bday_span) > 0:
+                                attribute_value = datetime.strptime(bday_span.text, "%Y-%m-%d")
                     case 'height':
                         attribute_value = int(attribute_value_column[0].text.split('(')[1].split('\xa0')[0])
                     case 'weight':
